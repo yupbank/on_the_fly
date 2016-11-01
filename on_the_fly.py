@@ -8,13 +8,13 @@ from sklearn.utils.fixes import frombuffer_empty
 from sklearn.utils import check_X_y
 from array import array
 
+
 class FlyVectorizer(DictVectorizer):
     """
     DictVectorizer that supports partial fit and transform
     """
     def add_default(self):
         if not hasattr(self, 'feature_names_') or not hasattr(self, 'vocabulary_'):
-            print 'dont have'
             self.vocabulary_ = dict()
             self.feature_names_ = []
         else:
@@ -94,6 +94,7 @@ class FlyVectorizer(DictVectorizer):
     def partial_fit_transform(self, X, y=None):
         return self.partial_transform(X, fitting=True)
 
+
 class FlySGD(SGDClassifier):
     def fly_fit(self, X, y, classes=None, sample_weight=None):
         """
@@ -104,19 +105,23 @@ class FlySGD(SGDClassifier):
         :param sample_weight:
         :return:
         """
-        print X, '----'
         X, y = check_X_y(X, y, "csr", copy=False, order='C', dtype=np.float64)
         if self.coef_ is not None and X.shape[1] > self.coef_.shape[1]:
             self.coef_ = np.pad(self.coef_, ((0, 0), (0, X.shape[1]-self.coef_.shape[1])), mode='constant')
         return self.partial_fit(X, y, classes, sample_weight)
 
     def reorder_coef(self, new_order):
+        '''
+        For merge cases, order before merge
+        :param new_order:
+        :return:
+        '''
         self.coef_ = self.coef_[new_order]
 
 
-def main():
+def test():
     f = FlyVectorizer(sparse=False)
-    clf = FlySGD(loss='log')
+    clf = FlySGD()
     data = [dict(a=1, b=2, c='x'), dict(a=1, b=3, c='y')]
     label = [1, 0]
     data = f.partial_fit_transform(data)
@@ -124,9 +129,10 @@ def main():
     print clf.coef_
     new_data = [dict(a=1, b=2, c='z'), dict(a=1, b=2, c='y')]
     new_label = [1, 0]
+    f.sparse = True
     new_data = f.partial_fit_transform(new_data)
     clf.fly_fit(new_data, new_label, classes=np.array([0, 1]))
     print clf.coef_
 
 if __name__ == "__main__":
-    main()
+    test()
