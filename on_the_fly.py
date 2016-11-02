@@ -116,7 +116,8 @@ class FlySGD(SGDClassifier):
         :param new_order:
         :return:
         '''
-        self.coef_ = self.coef_[new_order]
+        if self.coef_ is not None:
+            self.coef_ = self.coef_[:, new_order]
 
 
 def test():
@@ -131,6 +132,7 @@ def test():
     new_label = [1, 0]
     f.sparse = True
     new_data = f.partial_fit_transform(new_data)
+    print new_data.toarray()
     clf.fly_fit(new_data, new_label, classes=np.array([0, 1]))
     print clf.coef_
 
