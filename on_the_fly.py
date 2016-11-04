@@ -23,6 +23,9 @@ class FlyVectorizer(DictVectorizer):
     def partial_fit(self, X, y=None):
         self.add_default()
 
+        # Process everything as sparse regardless of setting
+        X = [X] if isinstance(X, Mapping) else X
+
         for x in X:
             for f, v in x.iteritems():
                 if isinstance(v, basestring):
