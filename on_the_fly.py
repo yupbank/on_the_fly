@@ -1,13 +1,11 @@
 from sklearn.feature_extraction import DictVectorizer
-import numpy as np
 from sklearn.linear_model import SGDClassifier
-from itertools import count
 import scipy.sparse as sp
 from collections import Mapping
 from sklearn.utils.fixes import frombuffer_empty
 from sklearn.utils import check_X_y
 from array import array
-
+import numpy as np
 
 class FlyVectorizer(DictVectorizer):
     """
@@ -25,17 +23,26 @@ class FlyVectorizer(DictVectorizer):
 
         # Process everything as sparse regardless of setting
         X = [X] if isinstance(X, Mapping) else X
-
         for x in X:
             for f, v in x.iteritems():
-                if isinstance(v, basestring):
-                    f = "%s%s%s" % (f, self.separator, v)
-                if f not in self.vocabulary_:
-                    self.vocabulary_[f] = len(self.feature_names_)
-                    self.feature_names_.append(f)
-
+                self.add_element(f, v, [], [], True, lambda x: x)
         return self
 
+    def add_element(self, f, v, indices, values, fitting, dtype):
+        if isinstance(v, basestring):
+            feature_name = "%s%s%s" % (f, self.separator, v)
+            v = 1
+            if feature_name in self.vocabulary_:
+                indices.append(self.vocabulary_[feature_name])
+                values.append(dtype(v))
+            elif fitting:
+                self.vocabulary_[feature_name] = len(self.feature_names_)
+                self.feature_names_.append(feature_name)
+                indices.append(self.vocabulary_[feature_name])
+                values.append(dtype(v))
+        elif hasattr(v, '__iter__'):
+            for vv in v.__iter__():
+                self.add_element(f, vv, indices, values, fitting, dtype)
 
     def partial_transform(self, X, fitting=None):
         self.add_default()
@@ -53,19 +60,7 @@ class FlyVectorizer(DictVectorizer):
 
         for x in X:
             for f, v in x.iteritems():
-                if isinstance(v, basestring):
-                    f = "%s%s%s" % (f, self.separator, v)
-                    v = 1
-                if f in self.vocabulary_:
-                    indices.append(self.vocabulary_[f])
-                    values.append(dtype(v))
-                else:
-                    if fitting:
-                        self.vocabulary_[f] = len(self.feature_names_)
-                        self.feature_names_.append(f)
-                        indices.append(self.vocabulary_[f])
-                        values.append(dtype(v))
-
+                self.add_element(f, v, indices, values, fitting, dtype)
             indptr.append(len(indices))
 
         if len(indptr) == 1:
@@ -101,7 +96,7 @@ class FlyVectorizer(DictVectorizer):
 class FlySGD(SGDClassifier):
     def fly_fit(self, X, y, classes=None, sample_weight=None):
         """
-        fly classifier helps you to online or batch
+        classifier helps you to online or batch process instances
         :param X:
         :param y:
         :param classes:
@@ -109,8 +104,9 @@ class FlySGD(SGDClassifier):
         :return:
         """
         X, y = check_X_y(X, y, "csr", copy=False, order='C', dtype=np.float64)
+        classes = classes is None or np.array([0, 1])
         if self.coef_ is not None and X.shape[1] > self.coef_.shape[1]:
-            self.coef_ = np.pad(self.coef_, ((0, 0), (0, X.shape[1]-self.coef_.shape[1])), mode='constant')
+            self.coef_ = np.pad(self.coef_, ((0, 0), (0, X.shape[1] - self.coef_.shape[1])), mode='constant')
         return self.partial_fit(X, y, classes, sample_weight)
 
     def reorder_coef(self, new_order):
@@ -119,8 +115,9 @@ class FlySGD(SGDClassifier):
         :param new_order:
         :return:
         '''
-        if self.coef_ is not None:
-            self.coef_ = self.coef_[:, new_order]
+        if self.coef_.shape[1] < len(new_order):
+            self.coef_ = np.pad(self.coef_, ((0, 0), (0, len(new_order) - self.coef_.shape[1])), mode='constant')
+        self.coef_ = self.coef_[:, new_order]
 
 
 def test():
