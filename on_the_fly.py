@@ -1,10 +1,11 @@
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import SGDClassifier
 import scipy.sparse as sp
-from collections import Mapping
+from collections import Mapping, defaultdict
 from sklearn.utils.fixes import frombuffer_empty
-from sklearn.utils import check_X_y
+from sklearn.utils import check_X_y, check_array
 from array import array
+from numbers import Number
 import numpy as np
 
 class FlyVectorizer(DictVectorizer):
@@ -29,9 +30,18 @@ class FlyVectorizer(DictVectorizer):
         return self
 
     def add_element(self, f, v, indices, values, fitting, dtype):
-        if isinstance(v, basestring):
-            feature_name = "%s%s%s" % (f, self.separator, v)
-            v = 1
+        if hasattr(v, '__iter__'):
+            for vv in v.__iter__():
+                self.add_element(f, vv, indices, values, fitting, dtype)
+        else:
+            if isinstance(v, basestring):
+                feature_name = "%s%s%s" % (f, self.separator, v)
+                v = 1
+            elif isinstance(v, Number):
+                feature_name = f
+            else:
+                raise Exception('Unsupported Type %s for {%s: %s}'%(type(v), f, v))
+            
             if feature_name in self.vocabulary_:
                 indices.append(self.vocabulary_[feature_name])
                 values.append(dtype(v))
@@ -40,9 +50,6 @@ class FlyVectorizer(DictVectorizer):
                 self.feature_names_.append(feature_name)
                 indices.append(self.vocabulary_[feature_name])
                 values.append(dtype(v))
-        elif hasattr(v, '__iter__'):
-            for vv in v.__iter__():
-                self.add_element(f, vv, indices, values, fitting, dtype)
 
     def partial_transform(self, X, fitting=None):
         self.add_default()
@@ -104,7 +111,7 @@ class FlySGD(SGDClassifier):
         :return:
         """
         X, y = check_X_y(X, y, "csr", copy=False, order='C', dtype=np.float64)
-        classes = classes is None or np.array([0, 1])
+        classes = np.array([0, 1]) if classes is None else classes
         if self.coef_ is not None and X.shape[1] > self.coef_.shape[1]:
             self.coef_ = np.pad(self.coef_, ((0, 0), (0, X.shape[1] - self.coef_.shape[1])), mode='constant')
         return self.partial_fit(X, y, classes, sample_weight)
