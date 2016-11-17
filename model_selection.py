@@ -415,3 +415,12 @@ class FlyRandomCV(RddCVMixin, RandomizedSearchCV):
 
     def fit(self, rdd, labeler):
         return super(FlyRandomCV, self).fit(rdd, labeler)
+
+
+def demo():
+    data = sc.textFile('xxx')
+    vec = FlyVec()
+    labler = FlyLabeler(vec, label_col='x')
+    clf = FlySGD(loss='log')
+    grid = FlyGridCV(clf)
+    grid.fit(data, labeler)
