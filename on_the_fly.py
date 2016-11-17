@@ -8,10 +8,12 @@ from array import array
 from numbers import Number
 import numpy as np
 
+
 class FlyVectorizer(DictVectorizer):
     """
     DictVectorizer that supports partial fit and transform
     """
+
     def add_default(self):
         if not hasattr(self, 'feature_names_') or not hasattr(self, 'vocabulary_'):
             self.vocabulary_ = dict()
@@ -22,7 +24,6 @@ class FlyVectorizer(DictVectorizer):
     def partial_fit(self, X, y=None):
         self.add_default()
 
-        # Process everything as sparse regardless of setting
         X = [X] if isinstance(X, Mapping) else X
         for x in X:
             for f, v in x.iteritems():
@@ -41,7 +42,6 @@ class FlyVectorizer(DictVectorizer):
                 feature_name = f
             else:
                 raise Exception('Unsupported Type %s for {%s: %s}'%(type(v), f, v))
-            
             if feature_name in self.vocabulary_:
                 indices.append(self.vocabulary_[feature_name])
                 values.append(dtype(v))
