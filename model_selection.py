@@ -2,12 +2,6 @@ from sklearn.grid_search import _CVScoreTuple, GridSearchCV, RandomizedSearchCV,
 from itertools import izip_longest
 
 
-def grouper(iterable, n, fillvalue=None):
-    "Collect data into fixed-length chunks or blocks"
-    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx
-    args = [iter(iterable)] * n
-    return izip_longest(fillvalue=fillvalue, *args)
-
 even_split = lambda lst, sz: [lst[i:i+sz] for i in range(0, len(lst), sz)]
 
 class FlySplit(object):
@@ -48,6 +42,10 @@ class FlyDuplicate(FlySplit):
 
 
 class FlyLabeler(object):
+    """
+    Transform iterator of raw data into X, y
+    based on vectoriztor and label_column
+    """
     def __init__(self, vec, y_label):
         self.vec = vec
         self.y_label = y_label
@@ -61,7 +59,13 @@ class FlyLabeler(object):
         y = data[:, y_col]
         return X, y
 
+
 class RddCVMixin(object):
+    """
+    Mixin for Cross Validation based on RDD
+    it helps to split/duplicate the rdd into paritions.
+    and evenly split params to different partitions to parallelize the parameter searching
+    """
     def _fit_partitions(self, labeler, all_params, fit_params):
         def _fit_partition(iterator, index):
             params = all_params[index]
@@ -72,14 +76,15 @@ class RddCVMixin(object):
                 cv = check_cv(self.cv, X, y, classifier=is_classifier(estimator))
                 for train, test in cv:
                     yield fit_grid_point(X, y, estimator, params, train, test, self.scorer_, 0, **fit_params)
+        return _fit_partition
 
-    def _fit(self, rdd, labeler, parameter_iterable, split_number=100):
+    def _fit(self, rdd, labeler, parameter_iterable):
         if self.n_duplicates == 1:
-            partitoner = FlySplit(self.n_splits)
+            self.partitoner = FlySplit(self.n_splits)
         else:
-            partitoner = FlyDuplicate(self.n_duplicates)
-
-        rdd = partitoner.prepare_rdd(rdd)
+            self.partitoner = FlyDuplicate(self.n_duplicates)
+        
+        rdd = self.partitoner.prepare_rdd(rdd)
         base_estimator = clone(self.estimator)
         self.scorer_ = check_scoring(self.estimator, scoring=self.scoring)
 
@@ -87,12 +92,12 @@ class RddCVMixin(object):
         all_params = list(parameter_iterable)
         parameters = even_split(all_params, rdd_partition_num)
 
-        out = rdd.mapPartitionsWithIndex(self._fit_partitions(self.estimator, labeler, parameters, self.cv, self.fit_params)).collect()
+        out = rdd.mapPartitionsWithIndex(self._fit_partitions(self.estimator, labeler, parameters, self.fit_params)).collect()
         # Out is a list of triplet: score, parameters, n_test_samples
+
         out = filter(None, out)
         out.sort(key=lambda x: all_params.index(x[1]))
         n_fits = len(out)
-
         n_folds = cv or 3
 
         scores = list()
