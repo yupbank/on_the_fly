@@ -1,12 +1,14 @@
+from numbers import Number
+from array import array
+from functools import reduce
+from collections import Mapping
+
+import numpy as np
+import scipy.sparse as sp
+from sklearn.utils import check_X_y
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import SGDClassifier
-import scipy.sparse as sp
-from collections import Mapping, defaultdict
 from sklearn.utils.fixes import frombuffer_empty
-from sklearn.utils import check_X_y, check_array
-from array import array
-from numbers import Number
-import numpy as np
 
 
 class FlyVectorizer(DictVectorizer):
@@ -99,16 +101,23 @@ class FlyVectorizer(DictVectorizer):
     def partial_fit_transform(self, X, y=None):
         return self.partial_transform(X, fitting=True)
 
+    @classmethod
+    def average_vecs(cls, vecs):
+        new_vec = cls()
+        new_vec.feature_names_ = sorted(reduce(lambda x, y: x.union(set(y.feature_names_)), vecs, set()))
+        new_vec.vocabulary_ = dict((feature, index) for index, feature in enumerate(new_vec.feature_names_))
+        return new_vec
+
 
 class FlySGD(SGDClassifier):
     def fly_fit(self, X, y, classes=None, sample_weight=None):
         """
         classifier helps you to online or batch process instances
-        :param X:
-        :param y:
-        :param classes:
-        :param sample_weight:
-        :return:
+        :param X: sample_instances, dense np.array or csr matrix
+        :param y: sample_labels, dense np.array
+        :param classes: [0, 1] or [-1, 1] depends on data, all the classes have to be seen for online partial fit
+        :param sample_weight: instances can have different weight according to trainning
+        :return: self
         """
         X, y = check_X_y(X, y, "csr", copy=False, order='C', dtype=np.float64)
         classes = np.array([0, 1]) if classes is None else classes
@@ -119,15 +128,20 @@ class FlySGD(SGDClassifier):
     def reorder_coef(self, new_order):
         '''
         For merge cases, order before merge
-        :param new_order:
-        :return:
+        :param new_order: adjust the coef_ by new coordinated order
+        :return: self
         '''
         if self.coef_.shape[1] < len(new_order):
             self.coef_ = np.pad(self.coef_, ((0, 0), (0, len(new_order) - self.coef_.shape[1])), mode='constant')
         self.coef_ = self.coef_[:, new_order]
+        return self
 
+    def normalize(self, count):
+        self.coef_ /= count
+        self.intercept_ /= count
+        return self
 
-def test():
+def demo():
     f = FlyVectorizer(sparse=False)
     clf = FlySGD()
     data = [dict(a=1, b=2, c='x'), dict(a=1, b=3, c='y')]
@@ -144,4 +158,4 @@ def test():
     print clf.coef_
 
 if __name__ == "__main__":
-    test()
+    demo()
