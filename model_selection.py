@@ -1,8 +1,16 @@
-from sklearn.grid_search import _CVScoreTuple, GridSearchCV, RandomizedSearchCV, fit_grid_point, check_cv
-from itertools import izip_longest
+from sklearn import clone
+from sklearn.base import is_classifier
+from sklearn.grid_search import _CVScoreTuple, GridSearchCV, RandomizedSearchCV, fit_grid_point, check_cv, \
+    _check_param_grid
+from itertools import groupby, imap
+import numpy as np
+
+from sklearn.metrics.scorer import check_scoring
 
 
-even_split = lambda lst, sz: [lst[i:i+sz] for i in range(0, len(lst), sz)]
+def even_split(lst, sz):
+    return [lst[i:i + sz] for i in range(0, len(lst), sz)]
+
 
 class FlySplit(object):
     """
@@ -10,23 +18,28 @@ class FlySplit(object):
     And use each sub group to evaluate small set of parameters.
     which is not perfect for small data.
     """
-    def __init__(self, split_number=1000):
+
+    def __init__(self, split_number=100):
         self.split_number = split_number
-    
+
     def _add_distribute_key(self, iterator):
         for i, record in enumerate(iterator):
-            split_key = i%self.split_number
-            yield split_key, record 
-    
-    def split_key(self, record):
+            split_key = i % self.split_number
+            yield split_key, record
+
+    @staticmethod
+    def split_key(record):
         return record[0]
 
-    def data_iter(self, iterator):
-        for parition_key, partition_iterator in groupby(iterator, key=self.split_key):
+    @staticmethod
+    def data_iter(iterator):
+        for _, partition_iterator in groupby(iterator, key=FlySplit.split_key):
             yield imap(lambda x: x[1], partition_iterator)
 
     def prepare_rdd(self, rdd):
-        return rdd.mapPartitions(self._add_sample_and_distribute_key).repartitionAndSortWithinPartitions(self.batch_number, partition_func=lambda kv, kv[0])
+        return rdd.mapPartitions(self._add_sample_and_distribute_key).repartitionAndSortWithinPartitions(
+            self.split_number, partition_func=FlySplit.split_key)
+
 
 class FlyDuplicate(FlySplit):
     """
@@ -35,24 +48,26 @@ class FlyDuplicate(FlySplit):
     which is not perfect for big data.
     And the duplicates of origin data is not going to be take care of.
     """
+
     def _add_distribute_key(self, iterator):
         for record in iterator:
             for duplicate_key in xrange(self.split_number):
-                yield split_key, record 
+                yield duplicate_key, record
 
 
 class FlyLabeler(object):
     """
     Transform iterator of raw data into X, y
-    based on vectoriztor and label_column
+    based on vectorization and label_column
     """
+
     def __init__(self, vec, y_label):
         self.vec = vec
         self.y_label = y_label
 
     def fit_transform(self, data_iter):
         data = self.vec.fit_transform(data_iter)
-        y_col = self.vec.vocabulary_[y_label]
+        y_col = self.vec.vocabulary_[self.y_label]
         x_col = self.vec.vocabulary_.values()
         x_col.remove(y_col)
         X = data[:, x_col]
@@ -66,25 +81,27 @@ class RddCVMixin(object):
     it helps to split/duplicate the rdd into paritions.
     and evenly split params to different partitions to parallelize the parameter searching
     """
-    def _fit_partitions(self, labeler, all_params, fit_params):
+
+    def _fit_partitions(self, labeler, all_params):
         def _fit_partition(iterator, index):
             params = all_params[index]
             estimator = clone(self.estimator)
 
-           for data_iter in splitor.data_iter(iterator): 
+            for data_iter in self.partitioner.data_iter(iterator):
                 X, y = labeler.fit_transform(data_iter)
                 cv = check_cv(self.cv, X, y, classifier=is_classifier(estimator))
                 for train, test in cv:
-                    yield fit_grid_point(X, y, estimator, params, train, test, self.scorer_, 0, **fit_params)
+                    yield fit_grid_point(X, y, estimator, params, train, test, self.scorer_, 0, **self.fit_params)
+
         return _fit_partition
 
     def _fit(self, rdd, labeler, parameter_iterable):
         if self.n_duplicates == 1:
-            self.partitoner = FlySplit(self.n_splits)
+            self.partitioner = FlySplit(self.n_splits)
         else:
-            self.partitoner = FlyDuplicate(self.n_duplicates)
-        
-        rdd = self.partitoner.prepare_rdd(rdd)
+            self.partitioner = FlyDuplicate(self.n_duplicates)
+
+        rdd = self.partitioner.prepare_rdd(rdd)
         base_estimator = clone(self.estimator)
         self.scorer_ = check_scoring(self.estimator, scoring=self.scoring)
 
@@ -92,13 +109,13 @@ class RddCVMixin(object):
         all_params = list(parameter_iterable)
         parameters = even_split(all_params, rdd_partition_num)
 
-        out = rdd.mapPartitionsWithIndex(self._fit_partitions(self.estimator, labeler, parameters, self.fit_params)).collect()
+        out = rdd.mapPartitionsWithIndex(self._fit_partitions(labeler, parameters)).collect()
         # Out is a list of triplet: score, parameters, n_test_samples
 
         out = filter(None, out)
         out.sort(key=lambda x: all_params.index(x[1]))
         n_fits = len(out)
-        n_folds = cv or 3
+        n_folds = self.cv or 3
 
         scores = list()
         grid_scores = list()
@@ -138,7 +155,8 @@ class RddCVMixin(object):
 
         return self
 
-class FlyGridCV(SparkCVMixin, GridSearchCV):
+
+class FlyGridCV(RddCVMixin, GridSearchCV):
     """Rdd based exhaustive search over specified parameter values for an estimator.
 
     Important members are fit, predict.
@@ -247,6 +265,7 @@ class FlyGridCV(SparkCVMixin, GridSearchCV):
 
     If `n_duplicates` was set to a value higher than one, the data is copied for n times. 
     """
+
     def __init__(self, estimator, param_grid, scoring=None, fit_params=None,
                  n_duplicates=1, n_splits=100, iid=True, refit=True, cv=None, verbose=0):
         self.param_grid = param_grid
@@ -259,8 +278,9 @@ class FlyGridCV(SparkCVMixin, GridSearchCV):
 
     def fit(self, rdd, labeler):
         return super(FlyGridCV, self).fit(rdd, labeler)
-            
-class FlyRandomCV(SparkCVMixin, RandomizedSearchCV):
+
+
+class FlyRandomCV(RddCVMixin, RandomizedSearchCV):
     """Radd based Randomized search on hyper parameters.
 
 
@@ -384,7 +404,6 @@ class FlyRandomCV(SparkCVMixin, RandomizedSearchCV):
     def __init__(self, estimator, param_distributions, n_iter=10, scoring=None,
                  fit_params=None, n_duplicates=1, n_splits=100, iid=True, refit=True, cv=None,
                  verbose=0, random_state=None):
-
         self.param_distributions = param_distributions
         self.n_iter = n_iter
         self.random_state = random_state
@@ -396,4 +415,3 @@ class FlyRandomCV(SparkCVMixin, RandomizedSearchCV):
 
     def fit(self, rdd, labeler):
         return super(FlyRandomCV, self).fit(rdd, labeler)
-
