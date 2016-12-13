@@ -56,13 +56,18 @@ def test_sgd_reorder_coef(data, label, vec, sgd):
     assert sgd.coef_.shape[1] == d.shape[1] + 1
 
 
-def test_sgd_normalize(data, label, vec, sgd, asgd):
+def test_sgd_consistent(data, label, vec, sgd, asgd):
     d = vec.partial_fit_transform(data)
     sgd.fly_fit(d, label, classes=[0, 1])
     asgd.fly_fit(d, label, classes=[0, 1])
     np.testing.assert_array_equal(sgd.coef_, asgd.coef_)
     np.testing.assert_array_equal(sgd.intercept_, asgd.intercept_)
 
+def test_sgd_normalize(data, label, vec, sgd, asgd):
+    d = vec.partial_fit_transform(data)
+    sgd.fly_fit(d, label, classes=[0, 1])
+    coef = np.copy(sgd.coef_)
+    intercept = np.copy(sgd.intercept_)
     sgd.normalize(2.0)
-    np.testing.assert_array_equal(sgd.coef_ * 2.0, asgd.coef_)
-    np.testing.assert_array_equal(sgd.intercept_ * 2.0, asgd.intercept_)
+    np.testing.assert_array_equal(sgd.coef_ * 2.0, coef)
+    np.testing.assert_array_equal(sgd.intercept_ * 2.0, intercept)

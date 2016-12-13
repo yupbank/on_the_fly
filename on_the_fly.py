@@ -2,6 +2,7 @@ from numbers import Number
 from array import array
 from functools import reduce
 from collections import Mapping
+import types
 
 import numpy as np
 import scipy.sparse as sp
@@ -13,7 +14,8 @@ from sklearn.utils.fixes import frombuffer_empty
 
 class FlyVectorizer(DictVectorizer):
     """
-    DictVectorizer that supports partial fit and transform
+    DictVectorizer that supports partial fit and transform.
+    It supports iteratble fileds in value of dictionary.
     """
 
     def add_default(self):
@@ -29,34 +31,35 @@ class FlyVectorizer(DictVectorizer):
         X = [X] if isinstance(X, Mapping) else X
         for x in X:
             for f, v in x.iteritems():
-                self.add_element(f, v, [], [], True, lambda x: x)
+                self.add_element(f, v)
         return self
 
-    def add_element(self, f, v, indices, values, fitting, dtype):
+    def add_element(self, f, v, fitting=True, transforming=False, indices=None, values=None):
         if hasattr(v, '__iter__'):
             for vv in v.__iter__():
-                self.add_element(f, vv, indices, values, fitting, dtype)
+                self.add_element(f, vv, fitting, transforming, indices, values)
         else:
             if isinstance(v, basestring):
                 feature_name = "%s%s%s" % (f, self.separator, v)
                 v = 1
-            elif isinstance(v, Number):
+            elif isinstance(v, (Number, types.BooleanType, types.NoneType)):
                 feature_name = f
             else:
                 raise Exception('Unsupported Type %s for {%s: %s}'%(type(v), f, v))
-            if feature_name in self.vocabulary_:
-                indices.append(self.vocabulary_[feature_name])
-                values.append(dtype(v))
-            elif fitting:
-                self.vocabulary_[feature_name] = len(self.feature_names_)
-                self.feature_names_.append(feature_name)
-                indices.append(self.vocabulary_[feature_name])
-                values.append(dtype(v))
+            if fitting:
+                if feature_name not in self.vocabulary_:
+                    self.vocabulary_[feature_name] = len(self.feature_names_)
+                    self.feature_names_.append(feature_name)
+
+            if transforming:
+                if feature_name in self.vocabulary_:
+                    indices.append(self.vocabulary_[feature_name])
+                    values.append(self.dtype(v))
+
 
     def partial_transform(self, X, fitting=None):
         self.add_default()
-
-        dtype = self.dtype
+        transforming = True
 
         # Process everything as sparse regardless of setting
         X = [X] if isinstance(X, Mapping) else X
@@ -69,7 +72,7 @@ class FlyVectorizer(DictVectorizer):
 
         for x in X:
             for f, v in x.iteritems():
-                self.add_element(f, v, indices, values, fitting, dtype)
+                self.add_element(f, v, fitting, transforming, indices, values)
             indptr.append(len(indices))
 
         if len(indptr) == 1:
@@ -80,7 +83,7 @@ class FlyVectorizer(DictVectorizer):
         shape = (len(indptr) - 1, len(self.vocabulary_))
 
         result_matrix = sp.csr_matrix((values, indices, indptr),
-                                      shape=shape, dtype=dtype)
+                                      shape=shape, dtype=self.dtype)
 
         # Sort everything if asked
         if fitting and self.sort:
