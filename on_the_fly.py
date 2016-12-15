@@ -45,7 +45,7 @@ class FlyVectorizer(DictVectorizer):
             elif isinstance(v, (Number, types.BooleanType, types.NoneType)):
                 feature_name = f
             else:
-                raise Exception('Unsupported Type %s for {%s: %s}'%(type(v), f, v))
+                raise Exception('Unsupported Type %s for {%s: %s}' % (type(v), f, v))
             if fitting:
                 if feature_name not in self.vocabulary_:
                     self.vocabulary_[feature_name] = len(self.feature_names_)
@@ -55,7 +55,6 @@ class FlyVectorizer(DictVectorizer):
                 if feature_name in self.vocabulary_:
                     indices.append(self.vocabulary_[feature_name])
                     values.append(self.dtype(v))
-
 
     def partial_transform(self, X, fitting=None):
         self.add_default()
@@ -103,6 +102,14 @@ class FlyVectorizer(DictVectorizer):
 
     def partial_fit_transform(self, X, y=None):
         return self.partial_transform(X, fitting=True)
+
+    def subset_features(self, features):
+        features = features or self.feature_names_
+        dimensions = []
+        for feature in self.feature_names_:
+            if feature in features or feature.split(self.separator)[0] in features:
+                dimensions.append(self.vocabulary_[feature])
+        return dimensions
 
     @classmethod
     def average_vecs(cls, vecs):
