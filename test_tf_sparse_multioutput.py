@@ -18,9 +18,9 @@ class TFMultiOutputClassifier(object):
     def fit(self, train_X, train_y, training_epochs=1):
         x = tf.sparse_placeholder(tf.float32, [None, self.number_of_features], name='x')
         W = tf.Variable(tf.truncated_normal([self.number_of_features, self.number_of_labels], stddev=1e-3), name='w')
-        y_hat = tf.nn.sigmoid(tf.sparse_tensor_dense_matmul(x, W))
+        y_hat = tf.sparse_tensor_dense_matmul(x, W)
         y = tf.placeholder(tf.float32, [None, self.number_of_labels], name='y')
-        cost = tf.reduce_mean(-tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(y_hat, y)))
+        cost = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(y_hat, y))
         optimizer = tf.train.GradientDescentOptimizer(self.learning_rate).minimize(cost)
         previous_error = np.inf
 
