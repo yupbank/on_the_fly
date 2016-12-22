@@ -8,7 +8,7 @@ from distutils.core import setup
 setup(
         name = 'on_the_fly',
         packages = ['on_the_fly',],
-        version = "0.01",
+        version = "0.01rc",
         description = 'easy machine learning',
         author = 'Peng Yu',
         author_email = 'yupbank@gmail.com',
