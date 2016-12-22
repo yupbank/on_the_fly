@@ -39,35 +39,35 @@ def test_vec_averag_vecs(data, vec, avec):
     d = data[0]
     vec.partial_fit_transform(d)
     avec.partial_fit_transform(data)
-    new_vec = vec.average_vecs([vec, avec])
+    new_vec = vec.average([vec, avec])
     assert sorted(new_vec.feature_names_) == sorted(avec.feature_names_)
 
 
 def test_sgd_partial_fit(data, label, vec, sgd):
     d = vec.partial_fit_transform(data)
-    sgd.fly_fit(d, label, classes=[0, 1])
+    sgd.partial_fit(d, label, classes=[0, 1])
     assert sgd.coef_.shape[1] == d.shape[1]
 
 
 def test_sgd_reorder_coef(data, label, vec, sgd):
     d = vec.partial_fit_transform(data)
-    sgd.fly_fit(d, label, classes=[0, 1])
+    sgd.partial_fit(d, label, classes=[0, 1])
     sgd.reorder_coef([i for i in xrange(d.shape[1] + 1)])
     assert sgd.coef_.shape[1] == d.shape[1] + 1
 
 
 def test_sgd_consistent(data, label, vec, sgd, asgd):
     d = vec.partial_fit_transform(data)
-    sgd.fly_fit(d, label, classes=[0, 1])
-    asgd.fly_fit(d, label, classes=[0, 1])
+    sgd.partial_fit(d, label)
+    asgd.partial_fit(d, label)
     np.testing.assert_array_equal(sgd.coef_, asgd.coef_)
     np.testing.assert_array_equal(sgd.intercept_, asgd.intercept_)
 
 def test_sgd_normalize(data, label, vec, sgd, asgd):
     d = vec.partial_fit_transform(data)
-    sgd.fly_fit(d, label, classes=[0, 1])
+    sgd.partial_fit(d, label, classes=[0, 1])
     coef = np.copy(sgd.coef_)
     intercept = np.copy(sgd.intercept_)
-    sgd.normalize(2.0)
-    np.testing.assert_array_equal(sgd.coef_ * 2.0, coef)
-    np.testing.assert_array_equal(sgd.intercept_ * 2.0, intercept)
+    new_sgd = sgd/2.0
+    np.testing.assert_array_equal(new_sgd.coef_ * 2.0, coef)
+    np.testing.assert_array_equal(new_sgd.intercept_ * 2.0, intercept)

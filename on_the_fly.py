@@ -6,13 +6,26 @@ import types
 
 import numpy as np
 import scipy.sparse as sp
+from sklearn.base import clone
 from sklearn.utils import check_X_y
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import SGDClassifier
 from sklearn.utils.fixes import frombuffer_empty
 
 
-class FlyVectorizer(DictVectorizer):
+class Base(object):
+    def __add__(self, other):
+        raise Exception('need implementation')
+
+    def __div__(self, other):
+        raise Exception('need implementation')
+
+    @classmethod
+    def average(cls, objs):
+        return sum(objs)/len(objs)
+
+
+class FlyVectorizer(DictVectorizer, Base):
     """
     DictVectorizer that supports partial fit and transform.
     It supports iteratble fileds in value of dictionary.
@@ -22,6 +35,7 @@ class FlyVectorizer(DictVectorizer):
         if not hasattr(self, 'feature_names_') or not hasattr(self, 'vocabulary_'):
             self.vocabulary_ = dict()
             self.feature_names_ = []
+            self.inverse_vocabulary_ = None
         else:
             self.sort = False
 
@@ -110,17 +124,38 @@ class FlyVectorizer(DictVectorizer):
             if feature in features or feature.split(self.separator)[0] in features:
                 dimensions.append(self.vocabulary_[feature])
         return dimensions
+    
+    @property
+    def inverse_vocabulary(self):
+        if self.inverse_vocabulary_ is None:
+            self.inverse_vocabulary_ = dict((j, i) for i, j in self.vocabulary_.iteritems())
+        return self.inverse_vocabulary_
 
-    @classmethod
-    def average_vecs(cls, vecs):
-        new_vec = cls()
-        new_vec.feature_names_ = sorted(reduce(lambda x, y: x.union(set(y.feature_names_)), vecs, set()))
-        new_vec.vocabulary_ = dict((feature, index) for index, feature in enumerate(new_vec.feature_names_))
-        return new_vec
+    def inverse_feature_by_index(self, index):
+        return self.inverse_vocabulary[index].split(self.separator)
+
+    def __add__(self, other):
+        if not isinstance(other, self.__class__):
+            return self
+
+        new = clone(self)
+        new.feature_names_ = sorted(set(self.feature_names_).union(set(other.feature_names_)))
+        new.vocabulary_ = dict((feature, index) for index, feature in enumerate(new.feature_names_))
+
+        return new
+
+    __radd__ = __add__
+    
+    def __div__(self, count):
+        return self
+    
+    def orders_from(self, lead):
+        return map(lambda x: self.vocabulary_.get(x, -1), lead.feature_names_)
 
 
-class FlySGD(SGDClassifier):
-    def fly_fit(self, X, y, classes=None, sample_weight=None):
+class FlySGDClassifier(SGDClassifier, Base):
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
         """
         classifier helps you to online or batch process instances
         :param X: sample_instances, dense np.array or csr matrix
@@ -131,9 +166,10 @@ class FlySGD(SGDClassifier):
         """
         X, y = check_X_y(X, y, "csr", copy=False, order='C', dtype=np.float64)
         classes = np.array([0, 1]) if classes is None else classes
-        if self.coef_ is not None and X.shape[1] > self.coef_.shape[1]:
+        if hasattr(self, 'coef_') and self.coef_ is not None and X.shape[1] > self.coef_.shape[1]:
             self.coef_ = np.pad(self.coef_, ((0, 0), (0, X.shape[1] - self.coef_.shape[1])), mode='constant')
-        return self.partial_fit(X, y, classes, sample_weight)
+
+        return super(FlySGDClassifier, self).partial_fit(X, y, classes, sample_weight)
 
     def reorder_coef(self, new_order):
         '''
@@ -146,25 +182,41 @@ class FlySGD(SGDClassifier):
         self.coef_ = self.coef_[:, new_order]
         return self
 
-    def normalize(self, count):
-        self.coef_ /= count
-        self.intercept_ /= count
-        return self
+    def __add__(self, other):
+        if not isinstance(other, self.__class__):
+            return self
+        new = clone(self)
+        new.classes_ = self.classes_
+        new.coef_ = np.sum(np.stack([self.coef_, other.coef_]), axis=0)
+        if self.fit_intercept:
+            new.intercept_ = np.sum(np.stack([self.intercept_, other.intercept_]), axis=0)
+        return new
+
+    __radd__ = __add__
+
+    def __div__(self, count):
+        new = clone(self)
+        new.classes_ = self.classes_
+        new.coef_ = self.coef_ / count
+        new.intercept_ = self.intercept_ / count
+        return new
+
+
 
 def demo():
     f = FlyVectorizer(sparse=False)
-    clf = FlySGD()
+    clf = FlySGDClassifier()
     data = [dict(a=1, b=2, c='x'), dict(a=1, b=3, c='y')]
     label = [1, 0]
     data = f.partial_fit_transform(data)
-    clf.fly_fit(data, label, classes=np.array([0, 1]))
+    clf.partial_fit(data, label, classes=np.array([0, 1]))
     print clf.coef_
     new_data = [dict(a=1, b=2, c='z'), dict(a=1, b=2, c='y')]
     new_label = [1, 0]
     f.sparse = True
     new_data = f.partial_fit_transform(new_data)
     print new_data.toarray()
-    clf.fly_fit(new_data, new_label, classes=np.array([0, 1]))
+    clf.partial_fit(new_data, new_label, classes=np.array([0, 1]))
     print clf.coef_
 
 if __name__ == "__main__":
