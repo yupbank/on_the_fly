@@ -1,6 +1,5 @@
 from numbers import Number
 from array import array
-from functools import reduce
 from collections import Mapping
 import types
 
