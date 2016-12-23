@@ -46,6 +46,9 @@ def test_vec_add(data, vec, avec):
     x = vec+avec
     assert sorted(x.feature_names_) == sorted(avec.feature_names_)
 
+    x = avec+1
+    assert sorted(x.feature_names_) == sorted(avec.feature_names_)
+
 
 def test_vec_divide(data, vec, avec):
     vec.partial_fit_transform(data)
