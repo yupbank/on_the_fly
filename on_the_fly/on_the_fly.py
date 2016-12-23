@@ -2,6 +2,7 @@ from numbers import Number
 from array import array
 from collections import Mapping
 import types
+import copy
 
 import numpy as np
 import scipy.sparse as sp
@@ -13,14 +14,25 @@ from sklearn.utils.fixes import frombuffer_empty
 
 
 class Base(object):
+    def add(self, other):
+        raise Exception('need implementation')
+
     def __add__(self, other):
+        if not isinstance(other, self.__class__):
+            return self
+        return self.add(other)
+    
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def div(self, other):
         raise Exception('need implementation')
 
     def __div__(self, other):
-        raise Exception('need implementation')
+        return self.div(other)
 
     @classmethod
-    def average(cls, objs):
+    def mean(cls, objs):
         return sum(objs)/len(objs)
 
 
@@ -133,19 +145,13 @@ class FlyVectorizer(DictVectorizer, Base):
     def inverse_feature_by_index(self, index):
         return self.inverse_vocabulary[index].split(self.separator)
 
-    def __add__(self, other):
-        if not isinstance(other, self.__class__):
-            return self
-
-        new = clone(self)
+    def add(self, other):
+        new = copy.copy(self)
         new.feature_names_ = sorted(set(self.feature_names_).union(set(other.feature_names_)))
         new.vocabulary_ = dict((feature, index) for index, feature in enumerate(new.feature_names_))
-
         return new
 
-    __radd__ = __add__
-    
-    def __div__(self, count):
+    def div(self, count):
         return self
     
     def orders_from(self, lead):
@@ -181,9 +187,7 @@ class FlySGDClassifier(SGDClassifier, Base):
         self.coef_ = self.coef_[:, new_order]
         return self
 
-    def __add__(self, other):
-        if not isinstance(other, self.__class__):
-            return self
+    def add(self, other):
         new = clone(self)
         new.classes_ = self.classes_
         new.coef_ = np.sum(np.stack([self.coef_, other.coef_]), axis=0)
@@ -191,9 +195,7 @@ class FlySGDClassifier(SGDClassifier, Base):
             new.intercept_ = np.sum(np.stack([self.intercept_, other.intercept_]), axis=0)
         return new
 
-    __radd__ = __add__
-
-    def __div__(self, count):
+    def div(self, count):
         new = clone(self)
         new.classes_ = self.classes_
         new.coef_ = self.coef_ / count
