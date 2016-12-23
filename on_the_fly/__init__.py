@@ -1,1 +1,2 @@
-from .on_the_fly import FlyVectorizer, FlySGDClassifier
+from .base_tool import FlyVectorizer, FlySGDClassifier
+from .rdd_tool import RddVectorizer, RddClassifier
