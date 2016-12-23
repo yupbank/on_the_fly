@@ -13,7 +13,7 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.utils.fixes import frombuffer_empty
 
 
-class Base(object):
+class FlyBase(object):
     def add(self, other):
         raise Exception('need implementation')
 
@@ -31,12 +31,15 @@ class Base(object):
     def __div__(self, other):
         return self.div(other)
 
-    @classmethod
-    def mean(cls, objs):
+    def __truediv__(self, other):
+        return self.div(other)
+
+    @staticmethod
+    def mean(objs):
         return sum(objs)/len(objs)
 
 
-class FlyVectorizer(DictVectorizer, Base):
+class FlyVectorizer(DictVectorizer, FlyBase):
     """
     DictVectorizer that supports partial fit and transform.
     It supports iteratble fileds in value of dictionary.
@@ -46,7 +49,7 @@ class FlyVectorizer(DictVectorizer, Base):
         if not hasattr(self, 'feature_names_') or not hasattr(self, 'vocabulary_'):
             self.vocabulary_ = dict()
             self.feature_names_ = []
-            self.inverse_vocabulary_ = None
+            self.inverse_vocabulary_ = dict()
         else:
             self.sort = False
 
@@ -138,7 +141,7 @@ class FlyVectorizer(DictVectorizer, Base):
     
     @property
     def inverse_vocabulary(self):
-        if self.inverse_vocabulary_ is None:
+        if not hasattr(self, 'inverse_vocabulary_') or not self.inverse_vocabulary_:
             self.inverse_vocabulary_ = dict((j, i) for i, j in self.vocabulary_.iteritems())
         return self.inverse_vocabulary_
 
@@ -158,7 +161,7 @@ class FlyVectorizer(DictVectorizer, Base):
         return map(lambda x: self.vocabulary_.get(x, -1), lead.feature_names_)
 
 
-class FlySGDClassifier(SGDClassifier, Base):
+class FlySGDClassifier(SGDClassifier, FlyBase):
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
         """
