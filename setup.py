@@ -16,4 +16,5 @@ setup(
         download_url = 'https://github.com/yupbank/on_the_fly/archive/0.02rc.tar.gz',
         keywords = ['on the fly', 'machine learning', 'sklearn', 'online'],
         classifiers = [],
+        install_requires = open('requirements.txt').read().split()
         )

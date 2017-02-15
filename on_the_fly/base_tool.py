@@ -160,6 +160,11 @@ class FlyVectorizer(DictVectorizer, FlyBase):
     def orders_from(self, lead):
         return map(lambda x: self.vocabulary_.get(x, -1), lead.feature_names_)
 
+    def get_feature_by_index(self, index):
+        feature_name_value = self.inverse_vocabulary[index].split(self.separator)
+        feature_name_value.append(True)
+        return feature_name_value[:2]
+
 
 class FlySGDClassifier(SGDClassifier, FlyBase):
 
