@@ -9,7 +9,11 @@ setup(
         name = 'on_the_fly',
         packages = ['on_the_fly',],
         version = "0.02rc1",
-        description = 'easy machine learning',
+        description = """on_the_fly: out-of-core learning for PySpark and Python iterators'
+
+        on_the_fly is a machine learning toolkit designed to efficiently perform
+        online feature extraction and learning on RDD and Python iterators.
+        """,
         author = 'Peng Yu',
         author_email = 'yupbank@gmail.com',
         url = 'https://github.com/yupbank/on_the_fly',
